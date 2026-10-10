@@ -3,6 +3,8 @@ import ollama
 
 # 1. Inizializziamo ChromaDB
 chroma_client = chromadb.PersistentClient(path="./chroma_db")
+RETRIEVER_MODEL = "bge-m3"
+INTERROGATION_MODEL = "qwen3.6"
 
 # 2. Creiamo la collezione specificando la distanza per Similarità del Coseno ('cosine')
 collection = chroma_client.get_or_create_collection(
@@ -23,8 +25,8 @@ print("-> Indicizzazione dei documenti nel database vettoriale...")
 # 4. Calcoliamo gli embedding per i documenti (usando il prefisso per i documenti)
 for i, doc in enumerate(documenti):
     response = ollama.embeddings(
-        model="nomic-embed-text", 
-        prompt=f"search_document: {doc}"
+        model=RETRIEVER_MODEL, 
+        prompt=doc
     )
     
     collection.upsert(
@@ -41,15 +43,20 @@ print(f"Domanda dell'utente: {domanda}")
 
 # Generiamo l'embedding per la domanda (usando il prefisso per le query)
 domanda_emb = ollama.embeddings(
-    model="nomic-embed-text", 
-    prompt=f"search_query: {domanda}"
+    model=RETRIEVER_MODEL, 
+    prompt=domanda
 )["embedding"]
 
 # Cerchiamo nel database
 risultati = collection.query(
     query_embeddings=[domanda_emb],
-    n_results=1
+    n_results=3,
+    include=["documents", "distances"]
 )
+
+# Analisi dei risultati della ricerca
+for doc, dist in zip(risultati["documents"][0], risultati["distances"][0]):
+    print(f"{dist:.4f}  {doc}")
 
 # Estraiamo il documento più simile
 contesto_trovato = risultati["documents"][0][0]
@@ -66,7 +73,7 @@ Risposta:"""
 
 print("-> Interrogazione di Ollama in corso...")
 risposta_ollama = ollama.chat(
-    model="qwen3.6",
+    model=INTERROGATION_MODEL,
     messages=[{"role": "user", "content": prompt_finale}]
 )
 
